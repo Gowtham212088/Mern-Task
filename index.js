@@ -1,4 +1,4 @@
-import express from "express";
+import express, { response } from "express";
 import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -10,6 +10,14 @@ const app = express();
 
 //! Express MiddleWare (Body Parser)
 app.use(express.json());
+
+//! Custom Middleware
+
+const auth = (request,response,next)=>{
+  const token = request.header("x-auth-token")
+  console.log(token);
+  next()
+}
 
 //! Configuring Enviroinment variables
 dotenv.config();
@@ -30,6 +38,7 @@ app.get("/", (request, response) => {
 // ?  SIGNUP DETAILS
 
 app.post("/create/newUsers", async (request, response) => {
+  
   const { name, email, contact, password, userDp } = request.body;
 
   // !  PASSWORD HASHING PROCESS
@@ -68,6 +77,7 @@ app.post("/create/newUsers", async (request, response) => {
 // ? LOGIN VERIFICATION
 
 app.post("/user/signIn", async (request, response) => {
+
   const { email, password } = request.body;
 
   const signIn = await client
@@ -84,16 +94,25 @@ app.post("/user/signIn", async (request, response) => {
       response.status(401).send("Invalid credentials");
     } else {
       const token = jsonwebtocken.sign(
-        {
-          id: signIn._id,
-          email: signIn.email,
-        },
+        signIn,
         process.env.privateKey1
       );
-      response.send({ message: signIn.email, token: token });
+      response.send({token:token});
     }
   }
 });
+
+app.get('/verify/:token',async(request,response)=>{
+
+
+  const {token} = request.params;
+  
+  const verifyLogin = await jsonwebtocken.decode(token, process.env.privateKey1);
+
+  response.send(verifyLogin)
+
+})
+
 
 app.post("/check/mailVerification", async (request, response) => {
 
@@ -112,7 +131,7 @@ app.post("/check/mailVerification", async (request, response) => {
   const checkAvailablity = await client
     .db("AuthApp")
     .collection("user")
-    .findOne(data);
+    .findOne({email:email});
 
   const BSON_id = await checkAvailablity._id;
 
@@ -169,25 +188,21 @@ app.post("/new-password/:_id/:token", async (request, response) => {
     response.status(404).send("not found");
   } else {
     const verify = await jsonwebtocken.decode(token, process.env.privateKey3);
-    // console.log(verify.email);
-
-    //? CONFORMING E-MAIL FROM TOKEN AND DATABASE
-
-    if (verify.email !== conformId.email) {
+  
+ //? CONFORMING E-MAIL FROM TOKEN AND DATABASE
+ if (verify.email !== conformId.email) {
       response.status(404).send("Token not Matched");
     } else {
       if (password == newPassword) {
         const updatedHashPassword = await createPassword(password);
-
-        const updatePassword = await client
+const updatePassword = await client
           .db("AuthApp")
           .collection("user")
           .updateOne(
             { _id: ObjectId(`${_id}`) },
             { $set: { password: updatedHashPassword } }
           );
-
-        response.send("Password updated Successfully");
+response.send("Password updated Successfully");
       } else {
         response.send("Password Mismatches");
       }
@@ -195,7 +210,7 @@ app.post("/new-password/:_id/:token", async (request, response) => {
   }
 });
 
-app.get("/getData", async (request, response) => {
+app.get("/getData",auth, async (request, response) => {
   const data = await client.db("AuthApp").collection("user").find().toArray();
   response.send(data);
 });
