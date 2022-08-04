@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
 import jsonwebtocken from "jsonwebtoken";
+import { json } from "stream/consumers";
 
 const app = express();
 
@@ -14,7 +15,7 @@ app.use(express.json());
 //! Custom Middleware
 
 const auth = (request,response,next)=>{
-  const token = request.header("x-auth-token")
+  const token =  request.header("x-auth-token")
   console.log(token);
   next()
 }
@@ -24,6 +25,10 @@ dotenv.config();
 
 //! Cors (Third party middleware)
 app.use(cors());
+
+//! Soluction for after deployment CORS ERROR.
+// app.use(cors({allow:"*"}));
+
 
 const PORT = 5000;
 
@@ -99,20 +104,9 @@ app.post("/user/signIn", async (request, response) => {
       );
       response.send({token:token});
     }
+  
   }
 });
-
-app.get('/verify/:token',async(request,response)=>{
-
-
-  const {token} = request.params;
-  
-  const verifyLogin = await jsonwebtocken.decode(token, process.env.privateKey1);
-
-  response.send(verifyLogin)
-
-})
-
 
 app.post("/check/mailVerification", async (request, response) => {
 
@@ -211,8 +205,16 @@ response.send("Password updated Successfully");
 });
 
 app.get("/getData",auth, async (request, response) => {
+
+const getDatas = request.header("x-auth-token")
+
+const crackData = jsonwebtocken.verify(getDatas,process.env.privateKey1)
+
+console.log(crackData);
+
   const data = await client.db("AuthApp").collection("user").find().toArray();
-  response.send(data);
+  
+  response.send(crackData);
 });
 
 app.listen(PORT, () => console.log(`Server connected on port ${PORT} 😊😊`));
