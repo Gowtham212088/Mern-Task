@@ -1,8 +1,8 @@
-import express, { response } from "express";
+import express, { request, response } from "express";
 import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
-import bcrypt from "bcrypt";
+import bcrypt, { hash } from "bcrypt";
 import nodemailer from "nodemailer";
 import jsonwebtocken from "jsonwebtoken";
 import { json } from "stream/consumers";
@@ -14,11 +14,11 @@ app.use(express.json());
 
 //! Custom Middleware
 
-const auth = (request,response,next)=>{
-  const token =  request.header("x-auth-token")
+const auth = (request, response, next) => {
+  const token = request.header("x-auth-token");
   console.log(token);
-  next()
-}
+  next();
+};
 
 //! Configuring Enviroinment variables
 dotenv.config();
@@ -28,7 +28,6 @@ app.use(cors());
 
 //! Soluction for after deployment CORS ERROR.
 // app.use(cors({allow:"*"}));
-
 
 const PORT = 5000;
 
@@ -43,7 +42,6 @@ app.get("/", (request, response) => {
 // ?  SIGNUP DETAILS
 
 app.post("/create/newUsers", async (request, response) => {
-  
   const { name, email, contact, password, userDp } = request.body;
 
   // !  PASSWORD HASHING PROCESS
@@ -82,7 +80,6 @@ app.post("/create/newUsers", async (request, response) => {
 // ? LOGIN VERIFICATION
 
 app.post("/user/signIn", async (request, response) => {
-
   const { email, password } = request.body;
 
   const signIn = await client
@@ -98,24 +95,19 @@ app.post("/user/signIn", async (request, response) => {
     if (!isPasswordMatch) {
       response.status(401).send("Invalid credentials");
     } else {
-      const token = jsonwebtocken.sign(
-        signIn,
-        process.env.privateKey1
-      );
-      response.send({token:token});
+      const token = jsonwebtocken.sign(signIn, process.env.privateKey1);
+      response.send({ token: token });
     }
-  
   }
 });
 
 app.post("/check/mailVerification", async (request, response) => {
-
   const data = request.body;
 
   const { email } = request.body;
 
   let token = await tokenGenerator(email);
-  
+
   const verifyIt = await jsonwebtocken.verify(token, process.env.privateKey3);
 
   // ? Here we check wheather the mentioned email-id in forgot-password page available in DB or Not.
@@ -125,7 +117,7 @@ app.post("/check/mailVerification", async (request, response) => {
   const checkAvailablity = await client
     .db("AuthApp")
     .collection("user")
-    .findOne({email:email});
+    .findOne({ email: email });
 
   const BSON_id = await checkAvailablity._id;
 
@@ -182,21 +174,21 @@ app.post("/new-password/:_id/:token", async (request, response) => {
     response.status(404).send("not found");
   } else {
     const verify = await jsonwebtocken.decode(token, process.env.privateKey3);
-  
- //? CONFORMING E-MAIL FROM TOKEN AND DATABASE
- if (verify.email !== conformId.email) {
+
+    //? CONFORMING E-MAIL FROM TOKEN AND DATABASE
+    if (verify.email !== conformId.email) {
       response.status(404).send("Token not Matched");
     } else {
       if (password == newPassword) {
         const updatedHashPassword = await createPassword(password);
-const updatePassword = await client
+        const updatePassword = await client
           .db("AuthApp")
           .collection("user")
           .updateOne(
             { _id: ObjectId(`${_id}`) },
             { $set: { password: updatedHashPassword } }
           );
-response.send("Password updated Successfully");
+        response.send("Password updated Successfully");
       } else {
         response.send("Password Mismatches");
       }
@@ -204,17 +196,50 @@ response.send("Password updated Successfully");
   }
 });
 
-app.get("/getData",auth, async (request, response) => {
+//! For collecting user profile data.
 
-const getDatas = request.header("x-auth-token")
+app.get("/getData", auth, async (request, response) => {
+  const getDatas = request.header("x-auth-token");
 
-const crackData = jsonwebtocken.verify(getDatas,process.env.privateKey1)
+  const crackData = jsonwebtocken.verify(getDatas, process.env.privateKey1);
 
-console.log(crackData);
+  // console.log(crackData);
 
   const data = await client.db("AuthApp").collection("user").find().toArray();
-  
+
   response.send(crackData);
+});
+
+//! Updating an User Informations
+
+app.put("/change/user", auth, async (request, response) => {
+  const hearderToken = request.header("x-auth-token");
+
+  const { _id, name, email, contact, password, userDp, iat } = request.body;
+
+  const hashedPassword = await createPassword(password);
+
+  const updateData = {
+    name: name,
+    email: email,
+    contact: contact,
+    password: hashedPassword,
+    userDp: userDp,
+  };
+
+  const responseData = jsonwebtocken.verify(
+    hearderToken,
+    process.env.privateKey1
+  );
+
+  const updateReferance = responseData._id;
+
+  const changeUserData = client
+    .db("AuthApp")
+    .collection("user")
+    .updateOne({ _id: ObjectId(`${updateReferance}`) }, { $set: updateData });
+
+  response.send("User Updated Successfully");
 });
 
 app.listen(PORT, () => console.log(`Server connected on port ${PORT} 😊😊`));
