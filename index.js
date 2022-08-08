@@ -10,14 +10,19 @@ import { json } from "stream/consumers";
 const app = express();
 
 //! Express MiddleWare (Body Parser)
-app.use(express.json());
+app.use(express.json({limit:"150mb"}));
 
-//! Custom Middleware
+//! Custom Middleware for Admin
 
 const auth = (request, response, next) => {
-  const token = request.header("x-auth-token");
-  console.log(token);
-  next();
+  try {
+    const token = request.header("x-auth-token");
+    
+    jsonwebtocken.verify(token, process.env.privateKey1);
+    next();
+  } catch (err) {
+    response.status(401).send({ error: err.message });
+  }
 };
 
 //! Configuring Enviroinment variables
@@ -39,7 +44,7 @@ app.get("/", (request, response) => {
   response.send("Welcome to Authentication");
 });
 
-// ?  SIGNUP DETAILS
+//!  SIGNUP DETAILS
 
 app.post("/create/newUsers", async (request, response) => {
   const { name, email, contact, password, userDp } = request.body;
@@ -77,7 +82,11 @@ app.post("/create/newUsers", async (request, response) => {
   }
 });
 
-// ? LOGIN VERIFICATION
+//! LOGIN VERIFICATION
+
+// ? Here if the Login information is valid,
+// ? It creates the user information as a token.
+// ? Then at front-end the token has been saved on headers.
 
 app.post("/user/signIn", async (request, response) => {
   const { email, password } = request.body;
@@ -101,8 +110,11 @@ app.post("/user/signIn", async (request, response) => {
   }
 });
 
+// ? Mail Verificartion
+
 app.post("/check/mailVerification", async (request, response) => {
-  const data = request.body;
+
+  // const data = request.body;
 
   const { email } = request.body;
 
@@ -202,8 +214,6 @@ app.get("/getData", auth, async (request, response) => {
   const getDatas = request.header("x-auth-token");
 
   const crackData = jsonwebtocken.verify(getDatas, process.env.privateKey1);
-
-  // console.log(crackData);
 
   const data = await client.db("AuthApp").collection("user").find().toArray();
 
